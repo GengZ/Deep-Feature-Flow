@@ -2,7 +2,8 @@
 MXNET_VERSION: "mxnet"
 output_path: "./output/dff_rfcn/imagenet_vid"
 symbol: resnet_v1_101_flownet_rfcn
-gpus: '0,1,2,3'
+# gpus: '0,1,2,3'
+gpus: '0'
 CLASS_AGNOSTIC: true
 SCALES:
 - 600
@@ -52,7 +53,8 @@ dataset:
   NUM_CLASSES: 31
   dataset: ImageNetVID
   dataset_path: "./data/ILSVRC2015"
-  image_set: DET_train_30classes+VID_train_15frames
+  # image_set: DET_train_30classes+VID_train_15frames
+  image_set: VID_train_15frames
   root_path: "./data"
   test_image_set: VID_val_videos
   proposal: rpn
