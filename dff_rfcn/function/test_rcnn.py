@@ -6,6 +6,11 @@
 # Modified by Yuwen Xiong
 # --------------------------------------------------------
 
+# -------------------------------------------
+DEBUG = 0
+import sys
+# -------------------------------------------
+
 import argparse
 import pprint
 import logging
@@ -46,7 +51,8 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path,
         assert False, 'require a logger'
 
     # print cfg
-    pprint.pprint(cfg)
+    if not DEBUG:
+        pprint.pprint(cfg)
     logger.info('testing cfg:{}\n'.format(pprint.pformat(cfg)))
 
     # load symbol and testing data
@@ -54,6 +60,15 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path,
     cur_sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
     key_sym = key_sym_instance.get_key_test_symbol(cfg)
     cur_sym = cur_sym_instance.get_cur_test_symbol(cfg)
+
+    # ******************************
+    # ImageNetVID
+    # VID_val_videos
+    # ./data
+    # ./data/ILSVRC2015
+    # ./output/dff_rfcn/imagenet_vid/resnet_v1_101_flownet_imagenet_vid_rfcn_end2end_ohem/VID_val_videos
+    # ******************************
+
     imdb = eval(dataset)(image_set, root_path, dataset_path, result_path=output_path)
     roidb = imdb.gt_roidb()
 

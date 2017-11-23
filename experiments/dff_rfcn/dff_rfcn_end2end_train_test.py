@@ -4,6 +4,7 @@
 # Licensed under The Apache-2.0 License [see LICENSE for details]
 # Written by Yuwen Xiong
 # --------------------------------------------------------
+DEBUG = 1
 import os
 import sys
 os.environ['PYTHONUNBUFFERED'] = '1'
@@ -16,7 +17,8 @@ import train_end2end
 import test
 
 if __name__ == "__main__":
-    train_end2end.main()
+    if not DEBUG:
+        train_end2end.main()
     test.main()
 
 

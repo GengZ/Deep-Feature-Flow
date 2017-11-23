@@ -6,6 +6,11 @@
 # Modified by Xizhou Zhu, Yuwen Xiong
 # --------------------------------------------------------
 
+# -------------------------------------------
+DEBUG = 0
+import sys
+import pprint
+# -------------------------------------------
 from multiprocessing.pool import ThreadPool as Pool
 import cPickle
 import os
@@ -219,6 +224,9 @@ def pred_eval(gpu_id, key_predictor, cur_predictor, test_data, imdb, cfg, vis=Fa
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
     #    (x1, y1, x2, y2, score)
+    # ------------------------------
+    # num_images: 176126
+    # ------------------------------
     all_boxes = [[[] for _ in range(num_images)]
                  for _ in range(imdb.num_classes)]
     frame_ids = np.zeros(num_images, dtype=np.int)
@@ -296,6 +304,7 @@ def pred_eval_multiprocess(gpu_num, key_predictors, cur_predictors, test_datas, 
         pool.close()
         pool.join()
         res = [res.get() for res in multiple_results]
+
     info_str = imdb.evaluate_detections_multiprocess(res)
     if logger:
         logger.info('evaluate detections: \n{}'.format(info_str))
