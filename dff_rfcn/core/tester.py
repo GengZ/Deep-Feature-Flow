@@ -204,8 +204,13 @@ def pred_eval(gpu_id, key_predictor, cur_predictor, test_data, imdb, cfg, vis=Fa
 
     det_file = os.path.join(imdb.result_path, imdb.name + '_'+ str(gpu_id) + '_detections.pkl')
     # ------------------
-    det_draw_file = os.path.join(imdb.result_path, imdb.name + '_' + str(gpu_id) + '_draw.pkl')
+    path_4_viz = './boxes'
+    if not os.path.exists(path_4_viz):
+        os.mkdir(path_4_viz)
+
+    det_draw_file = os.path.join(path_4_viz, imdb.name + '_' + str(gpu_id) + '_draw.pkl')
     # ------------------
+
     if os.path.exists(det_file) and not ignore_cache:
         with open(det_file, 'rb') as fid:
             all_boxes, frame_ids = cPickle.load(fid)
@@ -244,7 +249,9 @@ def pred_eval(gpu_id, key_predictor, cur_predictor, test_data, imdb, cfg, vis=Fa
     my_det_result = list()
     # ------------------------------
     # assume one image per batch
+    # ------------------------------
     for image_name, im_info, key_frame_flag, data_batch in test_data:
+    # ------------------------------
         t1 = time.time() - t
         t = time.time()
 
@@ -284,6 +291,7 @@ def pred_eval(gpu_id, key_predictor, cur_predictor, test_data, imdb, cfg, vis=Fa
                         keep = np.where(all_boxes[j][idx+delta][:, -1] >= image_thresh)[0]
                         all_boxes[j][idx+delta] = all_boxes[j][idx+delta][keep, :]
 
+            # ------------------------------
             if True:
                 boxes_this_image = [[]] + [all_boxes[j][idx+delta] for j in range(1, imdb.num_classes)]
                 # print len(boxes_this_image)
@@ -294,9 +302,11 @@ def pred_eval(gpu_id, key_predictor, cur_predictor, test_data, imdb, cfg, vis=Fa
                     boxes_this_image_per_cls = np.array(boxes_this_image[i])
                     boxes_thres_per_cls = boxes_this_image_per_cls[boxes_this_image_per_cls[:,-1] > THRES].tolist()
                     if len(boxes_thres_per_cls) != 0:
+                        image_name = '.' + image_name
                         boxes_thres_per_cls_ = [[image_name]+ [i] + item for item in boxes_thres_per_cls]
                         my_det_result += boxes_thres_per_cls_
                 # print my_det_result
+            # ------------------------------
 
             if vis:
                 vis_all_detection(data_dict['data'].asnumpy(), boxes_this_image, imdb.classes, scales[delta], cfg)
