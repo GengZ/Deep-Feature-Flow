@@ -20,6 +20,9 @@ class TestLoader(mx.io.DataIter):
                  has_rpn=False):
         super(TestLoader, self).__init__()
 
+        # getting image_name
+        self.image_name = None
+
         # save parameters as properties
         self.cfg = config
         self.roidb = roidb
@@ -88,7 +91,7 @@ class TestLoader(mx.io.DataIter):
                 self.key_frameid = 0
             elif self.cur_frameid - self.key_frameid == self.cfg.TEST.KEY_FRAME_INTERVAL:
                 self.key_frameid = self.cur_frameid
-            return self.im_info, self.key_frame_flag, mx.io.DataBatch(data=self.data, label=self.label,
+            return self.image_name, self.im_info, self.key_frame_flag, mx.io.DataBatch(data=self.data, label=self.label,
                                    pad=self.getpad(), index=self.getindex(),
                                    provide_data=self.provide_data, provide_label=self.provide_label)
         else:
@@ -106,6 +109,9 @@ class TestLoader(mx.io.DataIter):
     def get_batch(self):
         cur_roidb = self.roidb[self.cur_roidb_index].copy()
         cur_roidb['image'] = cur_roidb['pattern'] % self.cur_frameid
+        # add here
+        self.image_name = cur_roidb['image']
+        #
         self.cur_seg_len = cur_roidb['frame_seg_len']
         data, label, im_info = get_rpn_testbatch([cur_roidb], self.cfg)
         if self.key_frameid == self.cur_frameid: # key frame
