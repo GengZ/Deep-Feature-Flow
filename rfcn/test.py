@@ -49,8 +49,9 @@ def main():
 
     # model_path = os.path.join(final_output_path, '..', '_'.join([iset for iset in config.dataset.image_set.split('+')]), config.TRAIN.model_prefix)
     model_path = './model/rfcn_vid-0000.params'
+    model_prefix = model_path.split('-')[0]
     test_rcnn(config, config.dataset.dataset, config.dataset.test_image_set, config.dataset.root_path, config.dataset.dataset_path,
-              ctx, model_path, config.TEST.test_epoch,
+              ctx, model_prefix, config.TEST.test_epoch,
               args.vis, args.ignore_cache, args.shuffle, config.TEST.HAS_RPN, config.dataset.proposal, args.thresh, logger=logger, output_path=final_output_path)
 
 if __name__ == '__main__':
