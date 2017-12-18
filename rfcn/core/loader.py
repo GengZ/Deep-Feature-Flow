@@ -203,7 +203,7 @@ class AnchorLoader(mx.io.DataIter):
         return self.cur + self.batch_size <= self.size
 
     def next(self):
-        if self.iter_next():
+        if self.iter_next():    # index within bound
             self.get_batch_individual()
             self.cur += self.batch_size
             return mx.io.DataBatch(data=self.data, label=self.label,
@@ -300,6 +300,7 @@ class AnchorLoader(mx.io.DataIter):
     def get_batch_individual(self):
         cur_from = self.cur
         cur_to = min(cur_from + self.batch_size, self.size)
+        #- what does roidb contains?
         roidb = [self.roidb[self.index[i]] for i in range(cur_from, cur_to)]
         # decide multi device slice
         work_load_list = self.work_load_list

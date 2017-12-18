@@ -10,6 +10,8 @@
 varying with training iterations. If shapes vary, executors will rebind,
 using shared arrays from the initial module binded with maximum shape.
 """
+import sys
+import pprint
 
 import time
 import logging
@@ -967,6 +969,8 @@ class MutableModule(BaseModule):
                     monitor.tic()
                 # function of base_module
                 self.forward_backward(data_batch)
+                """ update: Update parameters according to the installed optimizer and the gradients computed
+                     in the previous forward-backward batch. """
                 self.update()
                 self.update_metric(eval_metric, data_batch.label)
 
@@ -1049,6 +1053,7 @@ class MutableModule(BaseModule):
 
     def update(self):
         assert self.binded and self.params_initialized and self.optimizer_initialized
+        #- _curr_module is a Module object
         self._curr_module.update()
 
     def get_outputs(self, merge_multi_context=True):

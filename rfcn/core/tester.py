@@ -5,6 +5,8 @@
 # Licensed under The Apache-2.0 License [see LICENSE for details]
 # Modified by Yuwen Xiong
 # --------------------------------------------------------
+# import pprint.pprint
+import sys
 
 import cPickle
 import os
@@ -225,6 +227,14 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
 
         scales = [iim_info[0, 2] for iim_info in im_info]
         scores_all, boxes_all, data_dict_all = im_detect(predictor, data_batch, data_names, scales, cfg)
+
+        # --------------------------------------------
+        # scores_all[0].shape = (300, 31)
+        # boxes_all[0].shape = (300, 8)
+        # data_dict_all[0]:
+        # {'data':(1, 3, 562, 1000), 'im_info':(1, 3)}
+        # 'data': original size
+        # --------------------------------------------
 
         t2 = time.clock() - t
         t = time.clock()
