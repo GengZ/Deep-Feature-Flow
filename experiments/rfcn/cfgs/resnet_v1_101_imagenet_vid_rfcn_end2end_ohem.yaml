@@ -1,8 +1,9 @@
 ---
 MXNET_VERSION: "mxnet"
-output_path: "./output/rfcn_pretrained_val/"
+output_path: "./output/rfcn_debug/single_gpu"
 symbol: resnet_v1_101_rfcn
-gpus: '0,1,2,3'
+# gpus: '0,1,2,3'
+gpus: '4'
 CLASS_AGNOSTIC: true
 SCALES:
 - 600
