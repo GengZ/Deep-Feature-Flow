@@ -752,6 +752,11 @@ class MutableModule(BaseModule):
         self.binded = False
         self._curr_module = None
 
+    # -----------------------------------------------
+    @property
+    def symbol(self):
+        return self._symbol
+    # -----------------------------------------------
     @property
     def data_names(self):
         return self._data_names

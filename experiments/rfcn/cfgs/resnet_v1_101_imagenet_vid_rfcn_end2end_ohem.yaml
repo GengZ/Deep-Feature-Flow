@@ -1,5 +1,5 @@
 ---
-MXNET_VERSION: "mxnet"
+MXNET_VERSION: "test"
 output_path: "./output/rfcn_debug/single_gpu"
 symbol: resnet_v1_101_rfcn
 # gpus: '0,1,2,3'

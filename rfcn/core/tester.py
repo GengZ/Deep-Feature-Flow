@@ -7,6 +7,7 @@
 # --------------------------------------------------------
 # import pprint.pprint
 import sys
+from rpn.rpn import assign_anchor
 
 import cPickle
 import os
@@ -26,6 +27,7 @@ class Predictor(object):
                  context=mx.cpu(), max_data_shapes=None,
                  provide_data=None, provide_label=None,
                  arg_params=None, aux_params=None):
+        self._symbol = symbol
         self._mod = MutableModule(symbol, data_names, label_names,
                                   context=context, max_data_shapes=max_data_shapes)
         self._mod.bind(provide_data, provide_label, for_training=False)
@@ -36,6 +38,70 @@ class Predictor(object):
         # [dict(zip(self._mod.output_names, _)) for _ in zip(*self._mod.get_outputs(merge_multi_context=False))]
         return [dict(zip(self._mod.output_names, _)) for _ in zip(*self._mod.get_outputs(merge_multi_context=False))]
 
+    @property
+    def symbol(self):
+        return self._symbol
+
+class Tracker(object):
+    # diff Predictor and Tracker
+    # required cfg file
+    def __init__(self, symbol, data_names, label_names,
+                 context=mx.cpu(), max_data_shapes=None,
+                 provide_data=None, provide_label=None,
+                 arg_params=None, aux_params=None, cfg=None):
+        self._symbol = symbol
+        self.cfg = cfg
+        self._mod = MutableModule(symbol, data_names, label_names,
+                                  context=context, max_data_shapes=max_data_shapes,
+                                  fixed_param_prefix=self.cfg.network.FIXED_PARAMS)
+# ref for self._mod:
+        # mod = MutableModule(sym, data_names=data_names, label_names=label_names,
+        #                     logger=logger, context=ctx,
+        #                       max_data_shapes=[max_data_shape for _ in range(batch_size)], fixed_param_prefix=fixed_param_prefix)
+
+        # for_training = True
+        self._mod.bind(provide_data, provide_label, for_training=True)
+        self._mod.init_params(arg_params=arg_params, aux_params=aux_params)
+
+        # train_net(args, ctx, config.network.pretrained, config.network.pretrained_epoch, config.TRAIN.model_prefix,
+        #           config.TRAIN.begin_epoch, config.TRAIN.end_epoch, config.TRAIN.lr, config.TRAIN.lr_step)
+        lr = self.cfg.TRAIN.lr
+        self.optimizer_params = {'momentum': self.cfg.TRAIN.momentum,
+                            'wd': self.cfg.TRAIN.wd,
+                            'learning_rate': lr,
+                            # 'lr_scheduler': lr_scheduler,
+                            'rescale_grad': 1.0,
+                            'clip_gradient': None}
+    # if not isinstance(train_data, PrefetchingIter):
+    #     train_data = PrefetchingIter(train_data)
+
+    # fit
+
+    @property
+    def symbol(self):
+        return self._symbol
+
+    def predict(self, data_batch):
+        self._mod.forward(data_batch)
+        print 'success'
+        # print '*' * 30
+        # print self._mod.output_names
+        # print self._mod.get_outputs(merge_multi_context=False)
+        sys.exit()
+        if True:
+            output_names_ = ['rois_output', 'cls_prob_reshape_output', 'bbox_pred_reshape_output']
+            internals_ = self._symbol.get_internals()
+            outputs_ = [internals_[_] for _ in output_names_]
+            print outputs_
+            sys.exit()
+        # [dict(zip(self._mod.output_names, _)) for _ in zip(*self._mod.get_outputs(merge_multi_context=False))]
+        return [dict(zip(self._mod.output_names, _)) for _ in zip(*self._mod.get_outputs(merge_multi_context=False))]
+
+    def online_update(self, data_batch):
+        self._mod.backward(data_batch)
+        # print 'success'
+        # sys.exit()
+        self._mod.update()
 
 def im_proposal(predictor, data_batch, data_names, scales):
     output_all = predictor.predict(data_batch)
@@ -190,6 +256,10 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
     :param thresh: valid detection threshold
     :return:
     """
+    sym_for_infer = predictor.symbol
+    feat_sym_ = sym_for_infer.get_internals()['rpn_cls_score_output']
+    print 'get symbol for infering shape!'
+
 
     det_file = os.path.join(imdb.result_path, imdb.name + '_detections.pkl')
     if os.path.exists(det_file) and not ignore_cache:
@@ -229,28 +299,99 @@ def pred_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=No
         scores_all, boxes_all, data_dict_all = im_detect(predictor, data_batch, data_names, scales, cfg)
 
         # --------------------------------------------
+        result_for_retraining = list()
+        my_thres = .5
+        # --------------------------------------------
         # scores_all[0].shape = (300, 31)
         # boxes_all[0].shape = (300, 8)
         # data_dict_all[0]:
         # {'data':(1, 3, 562, 1000), 'im_info':(1, 3)}
-        # 'data': original size
         # --------------------------------------------
 
         t2 = time.clock() - t
         t = time.clock()
+
+        # does not include multi=gpu support
         for delta, (scores, boxes, data_dict) in enumerate(zip(scores_all, boxes_all, data_dict_all)):
+            # data_dict[0]:
+            # {'data':(1, 3, 562, 1000), 'im_info':(1, 3)}
             for j in range(1, imdb.num_classes):
                 indexes = np.where(scores[:, j] > thresh)[0]
                 cls_scores = scores[indexes, j, np.newaxis]
                 cls_boxes = boxes[indexes, 4:8] if cfg.CLASS_AGNOSTIC else boxes[indexes, j * 4:(j + 1) * 4]
                 cls_dets = np.hstack((cls_boxes, cls_scores))
                 keep = nms(cls_dets)
+                # keep is a list of index
                 all_boxes[j][idx+delta] = cls_dets[keep, :]
 
+            # --------------------------------------------
+                keep_dets = cls_dets[keep, :]
+                index_for_retraining = np.where(keep_dets[:, -1] > my_thres)[0]
+
+                if index_for_retraining.size != 0:
+                    # print im_info
+                    # sys.exit()
+                    #- box scale for training
+                    for keep_det in (keep_dets[index_for_retraining, :4] * im_info[0][0][2]).tolist():
+                    # for keep_det in (keep_dets[index_for_retraining, :4] ).tolist():
+                        result_for_retraining.append(keep_det + [j * 1.])
+
+            data_for_training = dict()
+            # value converted to mx.nd.array
+            data_for_training['data'] = data_dict['data']
+            result_for_retraining = np.array(result_for_retraining)
+            data_for_training['gt_boxes'] = result_for_retraining
+            data_for_training['im_info'] = data_dict['im_info']
+
+            # prepare param
+            data_shape_ = {'data': data_dict['data'].shape}
+            _, feat_shape_, _ = feat_sym_.infer_shape(**data_shape_)
+            feat_shape_ = [int(i) for i in feat_shape_[0]]
+            label = assign_anchor(feat_shape_, result_for_retraining, data_dict['im_info'].asnumpy(), cfg,
+                                    cfg.network.RCNN_FEAT_STRIDE, cfg.network.ANCHOR_SCALES,
+                                    cfg.network.ANCHOR_RATIOS, 0,
+                                    cfg.network.NORMALIZE_RPN, cfg.network.ANCHOR_MEANS, cfg.network.ANCHOR_STDS)
+            label_for_training = label
+
+            # onvert to a list of value
+#           #? check here
+            data_for_training['gt_boxes'] = data_for_training['gt_boxes'][np.newaxis, :, :]
+            data_for_training['gt_boxes'] = mx.nd.array(data_for_training['gt_boxes'])
+            #? so that shape (1, 1, 5)
+            data_for_training_ = [data_for_training['data'], data_for_training['im_info'], data_for_training['gt_boxes']]
+            label_for_training_ = [label_for_training['label'], label_for_training['bbox_target'], label_for_training['bbox_weight']]
+
+            # convert the item to mx.nd.array
+            # data_fort_training_ already mx.nd.array
+            data_for_training__ = [data_for_training_]
+            label_for_training__ = [[mx.nd.array(i) for i in label_for_training_]]
+
+            provide_data_ft = [[(k, data_for_training[k].shape) for k in data_for_training]]
+            provide_label_ft = [[(k, label_for_training[k].shape) for k in label_for_training]]
+            #+ ok before here
+
+            # print provide_data_ft
+            # print provide_label_ft
+            data_batch = mx.io.DataBatch(data=data_for_training__, label=label_for_training__,
+                                   pad=0, index=0,
+                                   provide_data=provide_data_ft, provide_label=provide_label_ft)
+
+            predictor.online_update(data_batch)
+
+            # result_for_retraining:
+            # list of (boxes_para * 4, cls)
+            # print result_for_retraining
+            # print 'success'
+            # sys.exit()
+            # --------------------------------------------
+
+            # max_per_image = 300
             if max_per_image > 0:
                 image_scores = np.hstack([all_boxes[j][idx+delta][:, -1]
                                           for j in range(1, imdb.num_classes)])
                 if len(image_scores) > max_per_image:
+                    print 'wocao, haizhenyou\n'
+                    sys.exit()
                     image_thresh = np.sort(image_scores)[-max_per_image]
                     for j in range(1, imdb.num_classes):
                         keep = np.where(all_boxes[j][idx+delta][:, -1] >= image_thresh)[0]
