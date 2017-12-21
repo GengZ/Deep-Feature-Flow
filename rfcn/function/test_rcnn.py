@@ -5,6 +5,7 @@
 # Licensed under The Apache-2.0 License [see LICENSE for details]
 # Modified by Yuwen Xiong
 # --------------------------------------------------------
+import sys
 
 import argparse
 import pprint
@@ -27,13 +28,24 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path,
         assert False, 'require a logger'
 
     # print cfg
-    pprint.pprint(cfg)
+    # pprint.pprint(cfg)
     logger.info('testing cfg:{}\n'.format(pprint.pformat(cfg)))
 
     # load symbol and testing data
     sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
+
+    # ----------------------------------------------------------
     sym = sym_instance.get_test_symbol(cfg)
+    # sym = sym_instance.get_train_symbol(cfg)
+    # ----------------------------------------------------------
+
     imdb = eval(dataset)(image_set, root_path, dataset_path, result_path=output_path)
+    # ImageNetVID
+    #VID_val_frames
+    print dataset
+    print image_set
+    sys.exit()
+
     roidb = imdb.gt_roidb()
 
     # get test data iter
@@ -55,11 +67,17 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path,
     if not has_rpn:
         max_data_shape.append(('rois', (cfg.TEST.PROPOSAL_POST_NMS_TOP_N + 30, 5)))
 
+    # ----------------------------------------------------------
     # create predictor
     predictor = Predictor(sym, data_names, label_names,
                           context=ctx, max_data_shapes=max_data_shape,
                           provide_data=test_data.provide_data, provide_label=test_data.provide_label,
                           arg_params=arg_params, aux_params=aux_params)
+    # predictor = Predictor(sym, data_names, label_names,
+    #                       context=ctx, max_data_shapes=max_data_shape,
+    #                       provide_data=test_data.provide_data, provide_label=test_data.provide_label,
+    #                       arg_params=arg_params, aux_params=aux_params, cfg = cfg)
+    # ----------------------------------------------------------
 
     # start detection
     pred_eval(predictor, test_data, imdb, cfg, vis=vis, ignore_cache=ignore_cache, thresh=thresh, logger=logger)

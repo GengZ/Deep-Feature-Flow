@@ -60,9 +60,20 @@ def get_pair_image(roidb, config):
         eq_flag = 0 # 0 for unequal, 1 for equal
         assert os.path.exists(roi_rec['image']), '%s does not exist'.format(roi_rec['image'])
         im = cv2.imread(roi_rec['image'], cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION)
+        # 000.jpg
 
         if roi_rec.has_key('pattern'):
+            # got pattern
             ref_id = min(max(roi_rec['frame_seg_id'] + np.random.randint(config.TRAIN.MIN_OFFSET, config.TRAIN.MAX_OFFSET+1), 0),roi_rec['frame_seg_len']-1)
+            print '*' * 30
+            print roi_rec['image']
+            print ref_id
+            print '*' * 30
+            # import sys
+            # print config.TRAIN.MIN_OFFSET -9
+            # print config.TRAIN.MAX_OFFSET  0
+            # print ref_id single_number
+            # sys.exit()
             ref_image = roi_rec['pattern'] % ref_id
             assert os.path.exists(ref_image), '%s does not exist'.format(ref_image)
             ref_im = cv2.imread(ref_image, cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION)

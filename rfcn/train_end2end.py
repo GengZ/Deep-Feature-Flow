@@ -66,7 +66,7 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch, lr, 
     input_batch_size = config.TRAIN.BATCH_IMAGES * batch_size
 
     # print config
-    if DEBUG != 1:
+    if DEBUG == 0:
         pprint.pprint(config)
     logger.info('training config:{}\n'.format(pprint.pformat(config)))
 

@@ -91,6 +91,9 @@ class TestLoader(mx.io.DataIter):
                 self.key_frameid = 0
             elif self.cur_frameid - self.key_frameid == self.cfg.TEST.KEY_FRAME_INTERVAL:
                 self.key_frameid = self.cur_frameid
+
+            # print self.data
+            # print self.label
             return self.image_name, self.im_info, self.key_frame_flag, mx.io.DataBatch(data=self.data, label=self.label,
                                    pad=self.getpad(), index=self.getindex(),
                                    provide_data=self.provide_data, provide_label=self.provide_label)
@@ -233,6 +236,10 @@ class AnchorLoader(mx.io.DataIter):
         if self.iter_next():
             self.get_batch_individual()
             self.cur += self.batch_size
+            # import sys
+            # print self.data
+            # print self.label
+            # sys.exit()
             return mx.io.DataBatch(data=self.data, label=self.label,
                                    pad=self.getpad(), index=self.getindex(),
                                    provide_data=self.provide_data, provide_label=self.provide_label)
@@ -344,6 +351,11 @@ class AnchorLoader(mx.io.DataIter):
         all_label = [_['label'] for _ in rst]
         self.data = [[mx.nd.array(data[key]) for key in self.data_name] for data in all_data]
         self.label = [[mx.nd.array(label[key]) for key in self.label_name] for label in all_label]
+
+        # import sys
+        # print self.data
+        # print self.label
+        # sys.exit()
 
     def parfetch(self, iroidb):
         # get testing data for multigpu

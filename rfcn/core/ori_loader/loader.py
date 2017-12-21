@@ -3,7 +3,7 @@
 # Copyright (c) 2016 by Contributors
 # Copyright (c) 2017 Microsoft
 # Licensed under The Apache-2.0 License [see LICENSE for details]
-# Modified by Xizhou Zhu, Yuwen Xiong
+# Modified by Yuwen Xiong
 # --------------------------------------------------------
 
 import numpy as np
@@ -12,17 +12,13 @@ from mxnet.executor_manager import _split_input_slice
 
 from config.config import config
 from utils.image import tensor_vstack
-from rpn.rpn import get_rpn_testbatch, get_rpn_pair_batch, assign_anchor
-from rpn.rpn import get_rpn_batch
+from rpn.rpn import get_rpn_testbatch, get_rpn_batch, assign_anchor
 from rcnn import get_rcnn_testbatch, get_rcnn_batch
 
 class TestLoader(mx.io.DataIter):
     def __init__(self, roidb, config, batch_size=1, shuffle=False,
                  has_rpn=False):
         super(TestLoader, self).__init__()
-
-        # getting image_name
-        self.image_name = None
 
         # save parameters as properties
         self.cfg = config
@@ -32,20 +28,15 @@ class TestLoader(mx.io.DataIter):
         self.has_rpn = has_rpn
 
         # infer properties from roidb
-        self.size = np.sum([x['frame_seg_len'] for x in self.roidb])
+        self.size = len(self.roidb)
         self.index = np.arange(self.size)
 
         # decide data and label names (only for training)
-        self.data_name = ['data', 'im_info', 'data_key', 'feat_key']
+        if has_rpn:
+            self.data_name = ['data', 'im_info']
+        else:
+            self.data_name = ['data', 'rois']
         self.label_name = None
-
-        #
-        self.cur_roidb_index = 0
-        self.cur_frameid = 0
-        self.data_key = None
-        self.key_frameid = 0
-        self.cur_seg_len = 0
-        self.key_frame_flag = -1
 
         # status variable for synchronization between get_data and get_label
         self.cur = 0
@@ -85,14 +76,7 @@ class TestLoader(mx.io.DataIter):
         if self.iter_next():
             self.get_batch()
             self.cur += self.batch_size
-            self.cur_frameid += 1
-            if self.cur_frameid == self.cur_seg_len:
-                self.cur_roidb_index += 1
-                self.cur_frameid = 0
-                self.key_frameid = 0
-            elif self.cur_frameid - self.key_frameid == self.cfg.TEST.KEY_FRAME_INTERVAL:
-                self.key_frameid = self.cur_frameid
-            return self.image_name, self.im_info, self.key_frame_flag, mx.io.DataBatch(data=self.data, label=self.label,
+            return self.im_info, mx.io.DataBatch(data=self.data, label=self.label,
                                    pad=self.getpad(), index=self.getindex(),
                                    provide_data=self.provide_data, provide_label=self.provide_label)
         else:
@@ -108,26 +92,14 @@ class TestLoader(mx.io.DataIter):
             return 0
 
     def get_batch(self):
-        cur_roidb = self.roidb[self.cur_roidb_index].copy()
-        cur_roidb['image'] = cur_roidb['pattern'] % self.cur_frameid
-        # add here
-        self.image_name = cur_roidb['image']
-        #
-        self.cur_seg_len = cur_roidb['frame_seg_len']
-        data, label, im_info = get_rpn_testbatch([cur_roidb], self.cfg)
-        if self.key_frameid == self.cur_frameid: # key frame
-            self.data_key = data[0]['data'].copy()
-            if self.key_frameid == 0:
-                self.key_frame_flag = 0
-            else:
-                self.key_frame_flag = 1
+        cur_from = self.cur
+        cur_to = min(cur_from + self.batch_size, self.size)
+        roidb = [self.roidb[self.index[i]] for i in range(cur_from, cur_to)]
+        if self.has_rpn:
+            data, label, im_info = get_rpn_testbatch(roidb, self.cfg)
         else:
-            self.key_frame_flag = 2
-        extend_data = [{'data': data[0]['data'],
-                        'im_info': data[0]['im_info'],
-                        'data_key': self.data_key,
-                        'feat_key': np.zeros((1,self.cfg.network.DFF_FEAT_DIM,1,1))}]
-        self.data = [[mx.nd.array(extend_data[i][name]) for name in self.data_name] for i in xrange(len(data))]
+            data, label, im_info = get_rcnn_testbatch(roidb, self.cfg)
+        self.data = [[mx.nd.array(idata[name]) for name in self.data_name] for idata in data]
         self.im_info = im_info
 
 class AnchorLoader(mx.io.DataIter):
@@ -177,7 +149,7 @@ class AnchorLoader(mx.io.DataIter):
 
         # decide data and label names
         if config.TRAIN.END2END:
-            self.data_name = ['data', 'data_ref', 'eq_flag', 'im_info', 'gt_boxes']
+            self.data_name = ['data', 'im_info', 'gt_boxes']
         else:
             self.data_name = ['data']
         self.label_name = ['label', 'bbox_target', 'bbox_weight']
@@ -231,7 +203,7 @@ class AnchorLoader(mx.io.DataIter):
         return self.cur + self.batch_size <= self.size
 
     def next(self):
-        if self.iter_next():
+        if self.iter_next():    # index within bound
             self.get_batch_individual()
             self.cur += self.batch_size
             return mx.io.DataBatch(data=self.data, label=self.label,
@@ -286,7 +258,7 @@ class AnchorLoader(mx.io.DataIter):
         label_list = []
         for islice in slices:
             iroidb = [roidb[i] for i in range(islice.start, islice.stop)]
-            data, label = get_rpn_pair_batch(iroidb, self.cfg)
+            data, label = get_rpn_batch(iroidb, self.cfg)
             data_list.append(data)
             label_list.append(label)
 
@@ -328,6 +300,7 @@ class AnchorLoader(mx.io.DataIter):
     def get_batch_individual(self):
         cur_from = self.cur
         cur_to = min(cur_from + self.batch_size, self.size)
+        #- what does roidb contains?
         roidb = [self.roidb[self.index[i]] for i in range(cur_from, cur_to)]
         # decide multi device slice
         work_load_list = self.work_load_list
@@ -346,21 +319,14 @@ class AnchorLoader(mx.io.DataIter):
         self.data = [[mx.nd.array(data[key]) for key in self.data_name] for data in all_data]
         self.label = [[mx.nd.array(label[key]) for key in self.label_name] for label in all_label]
 
-        # import sys
-        # print self.data
-        # print self.label
-        # sys.exit()
+        import sys
+        print self.data
+        print self.label
+        sys.exit()
 
     def parfetch(self, iroidb):
         # get testing data for multigpu
-        # -----------------------------------------------------
-        # data, label = get_rpn_pair_batch(iroidb, self.cfg)
         data, label = get_rpn_batch(iroidb, self.cfg)
-        print data
-        print label
-        import sys
-        sys.exit()
-        # -----------------------------------------------------
         data_shape = {k: v.shape for k, v in data.items()}
         del data_shape['im_info']
         _, feat_shape, _ = self.feat_sym.infer_shape(**data_shape)

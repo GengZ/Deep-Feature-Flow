@@ -5,6 +5,7 @@
 # Written by Yuwen Xiong
 # --------------------------------------------------------
 DEBUG = 1
+TEST = DEBUG
 import os
 import sys
 os.environ['PYTHONUNBUFFERED'] = '1'
@@ -17,7 +18,7 @@ import train_end2end
 import test
 
 if __name__ == "__main__":
-    if not DEBUG:
+    if not TEST:
         train_end2end.main()
     test.main()
 
