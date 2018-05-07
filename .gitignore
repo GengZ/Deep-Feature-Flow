@@ -86,8 +86,9 @@ lib/dataset/pycocotools/*.cpp
 lib/nms/*.c
 lib/nms/*.cpp
 
-external
-output
-model
+./external
+./output
+./model
+./data
 
 .db
