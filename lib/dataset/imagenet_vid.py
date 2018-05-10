@@ -57,6 +57,7 @@ class ImageNetVID(IMDB):
         self.num_classes = len(self.classes)
         self.load_image_set_index()
         self.num_images = len(self.image_set_index)
+        self.suffix = '_gt_roidb_track'
         print 'num_images', self.num_images
 
     def load_image_set_index(self):
@@ -93,12 +94,12 @@ class ImageNetVID(IMDB):
         # assert os.path.exists(image_file), 'Path does not exist: {}'.format(image_file)
         return image_file
 
-    def gt_roidb(self, suffix='_gt_roidb'):
+    def gt_roidb(self):
         """
         return ground truth image regions database
         :return: imdb[image_index]['boxes', 'gt_classes', 'gt_overlaps', 'flipped']
         """
-        name_suffix = suffix + '.pkl'
+        name_suffix = self.suffix + '.pkl'
         cache_file = os.path.join(self.cache_path, self.name + name_suffix)
         if os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
@@ -211,6 +212,7 @@ class ImageNetVID(IMDB):
         gt_classes = np.zeros((num_objs), dtype=np.int32)
         overlaps = np.zeros((num_objs, self.num_classes), dtype=np.float32)
         valid_objs = np.zeros((num_objs), dtype=np.bool)
+        track_ids = np.full((num_objs), -1, dtype=np.int32)
 
         class_to_index = dict(zip(self.classes_map, range(self.num_classes)))
         # Load object bounding boxes into a data frame.
@@ -228,10 +230,14 @@ class ImageNetVID(IMDB):
             boxes[ix, :] = [x1, y1, x2, y2]
             gt_classes[ix] = cls
             overlaps[ix, cls] = 1.0
+            if self.det_vid == 'VID':
+                track_ids[ix] = int(obj.find('trackid').text)
 
         boxes = boxes[valid_objs, :]
         gt_classes = gt_classes[valid_objs]
         overlaps = overlaps[valid_objs, :]
+        if self.det_vid == 'VID':
+            track_ids = track_ids[valid_objs]
 
         assert (boxes[:, 2] >= boxes[:, 0]).all()
 
@@ -241,6 +247,10 @@ class ImageNetVID(IMDB):
                         'max_classes': overlaps.argmax(axis=1),
                         'max_overlaps': overlaps.max(axis=1),
                         'flipped': False})
+
+        if self.det_vid == 'VID':
+            roi_rec.update({'track_ids': track_ids})
+
         return roi_rec
 
 ###################################################################################################

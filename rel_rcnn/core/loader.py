@@ -12,7 +12,7 @@ from mxnet.executor_manager import _split_input_slice
 
 from config.config import config
 from utils.image import tensor_vstack
-from rpn.rpn import get_rpn_testbatch, get_rpn_batch, assign_anchor
+from rpn.rpn import get_rpn_testbatch, get_rpn_batch, assign_anchor, get_rpn_pair_batch_track
 from rcnn import get_rcnn_testbatch, get_rcnn_batch
 
 class TestLoader(mx.io.DataIter):
@@ -316,7 +316,7 @@ class AnchorLoader(mx.io.DataIter):
 
         self.label_name = ['label', 'bbox_target', 'bbox_weight']
 
-        if config.track.enable and config.track.train_pair:
+        if config.track.train.enable and config.track.train.train_pair:
             self.data_name.extend(['ref_data'])
             self.label_name.extend(['ref_label', 'ref_bbox_target', 'ref_bbox_weight'])
 
@@ -503,5 +503,18 @@ class AnchorLoader(mx.io.DataIter):
                               self.feat_stride, self.anchor_scales,
                               self.anchor_ratios, self.allowed_border,
                               self.normalize_target, self.bbox_mean, self.bbox_std)
+
+        # for ref_data
+        if config.track.train.enable and config.track.train.train_pair:
+            data['ref_gt_boxes'] = label['ref_gt_boxes'][np.newaxis, :, :]
+            ref_label = assign_anchor(feat_shape, label['ref_gt_boxes'], data['im_info'], self.cfg,
+                                        self.feat_stride, self.anchor_scales,
+                                        self.anchor_ratios, self.allowed_border,
+                                        self.normalize_target, self.bbox_mean, self.bbox_std)
+            for iref_label in ref_label.items():
+                item_name = 'ref_' + iref_label[0]
+                item_data = iref_label[0]
+                label.update({item_name: item_data})
+
         return {'data': data, 'label': label}
 

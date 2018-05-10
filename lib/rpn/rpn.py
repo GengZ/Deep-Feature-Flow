@@ -90,16 +90,21 @@ def get_rpn_pair_batch_track(roidb, cfg):
             'im_info': im_info}
     label = {'gt_boxes': gt_boxes}
 
+    if roidb[0].has_key('track_ids'):
+        cur_track_ids = roidb[0]['track_ids']
+        label.update({'track_ids': cur_track_ids})
+
     cur_roidb = roidb
     #
 
     # ref data
     roi_rec = roidb[0]
+    config = cfg
     if roi_rec.has_key('pattern'):
-        ref_id = min(max(roi_rec['frame_seg_id'] + np.random.randint(config.track.train.MIN_OFFSET, config.track.train.MAX_OFFSET+1), 0),roi_rec['frame_seg_len']-1)
+        ref_id = min(max(roi_rec['frame_seg_id'] + np.random.randint(config.track.train.min_offset, config.track.train.max_offset+1), 0),roi_rec['frame_seg_len']-1)
         ref_image = roi_rec['pattern'] % ref_id
         roi_rec['image'] = ref_image
-    ref_roidb = list(roi_rec)
+    ref_roidb = [roi_rec]
     imgs, roidb = get_image(ref_roidb, cfg)
 
     im_array = imgs[0]
@@ -107,29 +112,88 @@ def get_rpn_pair_batch_track(roidb, cfg):
     im_info = np.array([roidb[0]['im_info']], dtype=np.float32)
 
     # TODO:
+    # flip when cur_image do
     # return a whole item of roidb
-    ref_anno_path = roi_rec['image'].replace('Data','Annotation').replace('.JPEG', 'xml')
+    ref_anno_path = roi_rec['image'].replace('Data','Annotations').replace('.JPEG', '.xml')
     tree = ET.parse(ref_anno_path)
     objs = tree.findall('object')
     num_objs = len(objs)
 
-    boxes = np.zeros((num_objs, 4), dtype=np.unit16)
+    boxes = np.zeros((num_objs, 4), dtype=np.uint16)
     gt_classes = np.zeros((num_objs), dtype=np.int32)
     overlaps = np.zeros((num_objs, 31), dtype=np.float32)
     valid_objs = np.zeros((num_objs), dtype=np.bool)
+    if 'VID' in roi_rec['image']:
+        ref_ids = np.zeros((num_objs), dtype=np.int32)
+
+    classes_map = ['__background__',  # always index 0
+                    'n02691156', 'n02419796', 'n02131653', 'n02834778',
+                    'n01503061', 'n02924116', 'n02958343', 'n02402425',
+                    'n02084071', 'n02121808', 'n02503517', 'n02118333',
+                    'n02510455', 'n02342885', 'n02374451', 'n02129165',
+                    'n01674464', 'n02484322', 'n03790512', 'n02324045',
+                    'n02509815', 'n02411705', 'n01726692', 'n02355227',
+                    'n02129604', 'n04468005', 'n01662784', 'n04530566',
+                    'n02062744', 'n02391049']
+
+    num_classes = len(classes_map)
+
+    class_to_index = dict(zip(classes_map, range(num_classes)))
+    # Load object bounding boxes into a data frame.
+    for ix, obj in enumerate(objs):
+        bbox = obj.find('bndbox')
+        # Make pixel indexes 0-based
+        x1 = np.maximum(float(bbox.find('xmin').text), 0)
+        y1 = np.maximum(float(bbox.find('ymin').text), 0)
+        x2 = np.minimum(float(bbox.find('xmax').text), roi_rec['width']-1)
+        y2 = np.minimum(float(bbox.find('ymax').text), roi_rec['height']-1)
+        # add trackid
+        if 'VID' in roi_rec['image']:
+            id = float(obj.find('trackid').text)
+
+        if not class_to_index.has_key(obj.find('name').text):
+            continue
+        valid_objs[ix] = True
+        cls = class_to_index[obj.find('name').text.lower().strip()]
+        boxes[ix, :] = [x1, y1, x2, y2]
+        gt_classes[ix] = cls
+        overlaps[ix, cls] = 1.0
+        # add trackid
+        if 'VID' in roi_rec['image']:
+            ref_ids[ix] = id
+
+    boxes = boxes[valid_objs, :]
+    gt_classes = gt_classes[valid_objs]
+    overlaps = overlaps[valid_objs, :]
+    # add trackid
+    if 'VID' in roi_rec['image']:
+        ref_ids = ref_ids[valid_objs]
 
     # gt boxes: (x1, y1, x2, y2, cls)
-    if roidb[0]['gt_classes'].size > 0:
-        gt_inds = np.where(roidb[0]['gt_classes'] != 0)[0]
-        gt_boxes = np.empty((roidb[0]['boxes'].shape[0], 5), dtype=np.float32)
-        gt_boxes[:, 0:4] = roidb[0]['boxes'][gt_inds, :]
-        gt_boxes[:, 4] = roidb[0]['gt_classes'][gt_inds]
+    # if roidb[0]['gt_classes'].size > 0:
+    #     gt_inds = np.where(roidb[0]['gt_classes'] != 0)[0]
+    #     gt_boxes = np.empty((roidb[0]['boxes'].shape[0], 5), dtype=np.float32)
+    #     gt_boxes[:, 0:4] = roidb[0]['boxes'][gt_inds, :]
+    #     gt_boxes[:, 4] = roidb[0]['gt_classes'][gt_inds]
+    # else:
+    #     gt_boxes = np.empty((0, 5), dtype=np.float32)
+
+    if gt_classes.size > 0:
+        gt_inds = np.where(gt_classes != 0)[0]
+        gt_boxes = np.empty((gt_classes.shape[0], 5), dtype=np.float32)
+        gt_boxes[:, 0:4] = boxes[gt_inds, :]
+        gt_boxes[:, 4] = gt_classes[gt_inds]
     else:
         gt_boxes = np.empty((0, 5), dtype=np.float32)
+
+    assert (boxes[:, 2] >= boxes[:, 0]).all()
 
     data.update({'ref_data': im_array,
                  })
     label.update({'ref_gt_boxes': gt_boxes})
+
+    if 'VID' in roi_rec['image']:
+        label.update({'ref_track_ids': ref_ids})
     #
 
     return data, label
