@@ -93,12 +93,13 @@ class ImageNetVID(IMDB):
         # assert os.path.exists(image_file), 'Path does not exist: {}'.format(image_file)
         return image_file
 
-    def gt_roidb(self):
+    def gt_roidb(self, suffix='_gt_roidb'):
         """
         return ground truth image regions database
         :return: imdb[image_index]['boxes', 'gt_classes', 'gt_overlaps', 'flipped']
         """
-        cache_file = os.path.join(self.cache_path, self.name + '_gt_roidb.pkl')
+        name_suffix = suffix + '.pkl'
+        cache_file = os.path.join(self.cache_path, self.name + name_suffix)
         if os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
@@ -110,6 +111,68 @@ class ImageNetVID(IMDB):
             cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
         print 'wrote gt roidb to {}'.format(cache_file)
 
+        return gt_roidb
+
+    def pair_gt_roidb(self):
+        '''
+        augment roidb with ref_*
+        '''
+        pass
+
+    def multi_obj_roidb(self, min_obj=2, suffix='_multi_obj_roidb_'):
+        if self.det_vid != 'VID':
+            return None
+
+        name_suffix = suffix + str(min_obj) + '.pkl'
+        cache_file = os.path.join(self.cache_path, self.name + name_suffix)
+        # if os.path.exists(cache_file):
+        #     with open(cache_file, 'rb') as fid:
+        #         roidb = cPickle.load(fid)
+        #     print '{} gt roidb loaded from {}'.format(self.name, cache_file)
+        #     return roidb
+
+        roidb_from_imageset = self.gt_roidb()
+        print len(roidb_from_imageset)
+        video_reserved = list()
+        video_name_reserved = list()
+
+        # get all video_names
+        video_names = list()
+        for iroidb in roidb_from_imageset:
+            video_name = '/'.join(iroidb['image'].split('/')[:-1])
+            if (video_name not in video_names) and ('VID' in video_name):
+                video_names.append(video_name)
+
+        # filter out video with less than min_obj objects
+        valid_idx = np.zeros(len(video_names))
+        max_objs_per_image = np.zeros(len(video_names))
+        for idx, video_name in enumerate(video_names):
+            max_obj = -1
+            for iroidb in roidb_from_imageset:
+                if video_name in iroidb['image']:
+                    obj_this_frame = len(iroidb['boxes'])
+                    if max_obj < obj_this_frame:
+                        max_obj = obj_this_frame
+
+            max_objs_per_image[idx] = max_obj
+            if max_obj > min_obj:
+                valid_idx[idx] = 1
+
+        valid_idx = valid_idx.astype(bool)
+        video_name_reserved = np.array(video_names)[valid_idx].tolist()
+        max_objs_per_image = max_objs_per_image[valid_idx].tolist()
+        a = zip(video_name_reserved, max_objs_per_image)
+        gt_roidb = list()
+        for ia in a:
+            gt_roidb.extend([{'video_name': ia[0],
+                             'objs': ia[1]}])
+
+        with open(cache_file, 'wb') as fid:
+            cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
+        print 'wrote gt roidb to {}'.format(cache_file)
+        print 'valid video nums: %d' % len(gt_roidb)
+        # import IPython
+        # IPython.embed()
         return gt_roidb
 
     def load_vid_annotation(self, iindex):
@@ -266,7 +329,7 @@ class ImageNetVID(IMDB):
                             f.write('{:d} {:d} {:.4f} {:.2f} {:.2f} {:.2f} {:.2f}\n'.
                                     format(frame_ids[im_ind], cls_ind, dets[k, -1],
                                            dets[k, 0], dets[k, 1], dets[k, 2], dets[k, 3]))
-    
+
     def do_python_eval(self):
         """
         python evaluation wrapper

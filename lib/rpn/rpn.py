@@ -17,6 +17,8 @@ from utils.image import get_image, get_pair_image, tensor_vstack
 from generate_anchor import generate_anchors
 from bbox.bbox_transform import bbox_overlaps, bbox_transform
 
+# for pair data
+import xml.etree.ElementTree as ET
 
 def get_rpn_testbatch(roidb, cfg):
     """
@@ -59,6 +61,76 @@ def get_rpn_batch(roidb, cfg):
     data = {'data': im_array,
             'im_info': im_info}
     label = {'gt_boxes': gt_boxes}
+
+    return data, label
+
+def get_rpn_pair_batch_track(roidb, cfg):
+    """
+    prototype for rpn batch: data, im_info, gt_boxes
+    :param roidb: ['image', 'flipped'] + ['gt_boxes', 'boxes', 'gt_classes']
+    :return: data, label
+    """
+    assert len(roidb) == 1, 'Single batch only'
+
+    # cur_data
+    imgs, roidb = get_image(roidb, cfg)
+    im_array = imgs[0]
+    im_info = np.array([roidb[0]['im_info']], dtype=np.float32)
+
+    # gt boxes: (x1, y1, x2, y2, cls)
+    if roidb[0]['gt_classes'].size > 0:
+        gt_inds = np.where(roidb[0]['gt_classes'] != 0)[0]
+        gt_boxes = np.empty((roidb[0]['boxes'].shape[0], 5), dtype=np.float32)
+        gt_boxes[:, 0:4] = roidb[0]['boxes'][gt_inds, :]
+        gt_boxes[:, 4] = roidb[0]['gt_classes'][gt_inds]
+    else:
+        gt_boxes = np.empty((0, 5), dtype=np.float32)
+
+    data = {'data': im_array,
+            'im_info': im_info}
+    label = {'gt_boxes': gt_boxes}
+
+    cur_roidb = roidb
+    #
+
+    # ref data
+    roi_rec = roidb[0]
+    if roi_rec.has_key('pattern'):
+        ref_id = min(max(roi_rec['frame_seg_id'] + np.random.randint(config.track.train.MIN_OFFSET, config.track.train.MAX_OFFSET+1), 0),roi_rec['frame_seg_len']-1)
+        ref_image = roi_rec['pattern'] % ref_id
+        roi_rec['image'] = ref_image
+    ref_roidb = list(roi_rec)
+    imgs, roidb = get_image(ref_roidb, cfg)
+
+    im_array = imgs[0]
+    # assume image from the same video has same size
+    im_info = np.array([roidb[0]['im_info']], dtype=np.float32)
+
+    # TODO:
+    # return a whole item of roidb
+    ref_anno_path = roi_rec['image'].replace('Data','Annotation').replace('.JPEG', 'xml')
+    tree = ET.parse(ref_anno_path)
+    objs = tree.findall('object')
+    num_objs = len(objs)
+
+    boxes = np.zeros((num_objs, 4), dtype=np.unit16)
+    gt_classes = np.zeros((num_objs), dtype=np.int32)
+    overlaps = np.zeros((num_objs, 31), dtype=np.float32)
+    valid_objs = np.zeros((num_objs), dtype=np.bool)
+
+    # gt boxes: (x1, y1, x2, y2, cls)
+    if roidb[0]['gt_classes'].size > 0:
+        gt_inds = np.where(roidb[0]['gt_classes'] != 0)[0]
+        gt_boxes = np.empty((roidb[0]['boxes'].shape[0], 5), dtype=np.float32)
+        gt_boxes[:, 0:4] = roidb[0]['boxes'][gt_inds, :]
+        gt_boxes[:, 4] = roidb[0]['gt_classes'][gt_inds]
+    else:
+        gt_boxes = np.empty((0, 5), dtype=np.float32)
+
+    data.update({'ref_data': im_array,
+                 })
+    label.update({'ref_gt_boxes': gt_boxes})
+    #
 
     return data, label
 

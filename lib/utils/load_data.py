@@ -9,6 +9,8 @@ def load_gt_roidb(dataset_name, image_set_name, root_path, dataset_path, result_
     roidb = imdb.gt_roidb()
     if flip:
         roidb = imdb.append_flipped_images(roidb)
+    if 'VID' in image_set_name:
+        a = imdb.multi_obj_roidb()
     return roidb
 
 
