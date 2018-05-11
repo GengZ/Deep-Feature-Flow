@@ -82,6 +82,9 @@ def train_net(args, ctx, pretrained, epoch, prefix, begin_epoch, end_epoch, lr, 
                               normalize_target=config.network.NORMALIZE_RPN, bbox_mean=config.network.ANCHOR_MEANS,
                               bbox_std=config.network.ANCHOR_STDS)
 
+    import IPython
+    IPython.embed()
+
     # infer max shape
     max_data_shape = [('data', (config.TRAIN.BATCH_IMAGES, 3, max([v[0] for v in config.SCALES]), max([v[1] for v in config.SCALES])))]
     max_data_shape, max_label_shape = train_data.infer_shape(max_data_shape)
