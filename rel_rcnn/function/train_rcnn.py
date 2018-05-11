@@ -61,6 +61,9 @@ def train_rcnn(cfg, dataset, image_set, root_path, dataset_path,
     train_data = ROIIter(roidb, cfg, batch_size=input_batch_size, shuffle=shuffle,
                          ctx=ctx, aspect_grouping=cfg.TRAIN.ASPECT_GROUPING)
 
+    import IPython
+    IPython.embed()
+
     # infer max shape
     max_data_shape = [('data', (cfg.TRAIN.BATCH_IMAGES, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES])))]
 
